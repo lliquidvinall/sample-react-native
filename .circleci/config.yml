@@ -102,6 +102,7 @@ jobs:
             rm -rf $TMPDIR/react-*
             rm -rf $TMPDIR/haste-*
             rm -rf $TMPDIR/metro-*
+            npm install -g watchman
             watchman watch-del-all
             react-native start --reset-cache &
             yarn run test:ios-e2e-run

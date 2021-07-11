@@ -107,8 +107,6 @@ jobs:
             brew install watchman
             watchman watch-del-all
             react-native start --reset-cache &
-            adb kill-server
-            adb start-server
             yarn run test:ios-e2e-run
 
   android:
@@ -151,8 +149,6 @@ jobs:
             rm -rf $TMPDIR/haste-*
             rm -rf $TMPDIR/metro-*
             react-native start --reset-cache &
-            adb kill-server
-            adb start-server
             yarn run test:android-e2e-run
 
 workflows:

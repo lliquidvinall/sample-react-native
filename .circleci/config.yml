@@ -7,23 +7,11 @@ aliases:
   - &restore-gradle-cache
     name: Restore cached gradle dependencies
     key: gradle_cache-{{ checksum "android/build.gradle" }}-{{ checksum  "android/app/build.gradle" }}
-  - &restore-pods-cache
-    name: Restore cached ios Pods
-    key: pods-cache-{{ checksum "ios/Podfile.lock" }}
+
 
 defaults: &defaults
   macos:
     xcode: 11.6.0
-
-## iOS Caching
-restore_pods_cache: &restore_pods_cache
-  restore_cache: *restore-pods-cache
-
-save_pods_cache: &save_pods_cache
-  save_cache:
-    key: pods-cache-{{ checksum "ios/Podfile.lock" }}
-    paths:
-      - ios/Pods
 
 ## Android Caching
 restore_gradle_cache: &restore_gradle_cache
@@ -76,35 +64,6 @@ jobs:
       - run:
           name: Run Unit Tests
           command: yarn run test:unit-tests
-
-  ios:
-    <<: *defaults
-    parallelism: 2
-    steps:
-      - checkout
-      - restore_cache: *restore-yarn-cache
-      - run:
-          name: Install React Native dependencies
-          command: |
-            brew update
-            brew install watchman cocoapods || exit 0
-      - *install_cli_interfaces
-      - *restore_pods_cache
-      - run:
-          name: pods install
-          command: |
-            cd ios
-            pod install
-      - *save_pods_cache
-      - run:
-          name: Build app and run tests
-          command: |
-            rm -rf $TMPDIR/react-*
-            rm -rf $TMPDIR/haste-*
-            rm -rf $TMPDIR/metro-*
-            watchman watch-del-all
-            react-native start --reset-cache &
-            yarn run test:ios-e2e-run
 
   android:
     <<: *defaults

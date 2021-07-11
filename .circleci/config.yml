@@ -87,7 +87,7 @@ jobs:
           name: Install React Native dependencies
           command: |
             brew update
-            brew install watchman cocoapods || exit 0
+            sudo gem install cocoapods -n /usr/local/bin
       - *install_cli_interfaces
       - *restore_pods_cache
       - run:
@@ -128,7 +128,7 @@ jobs:
       - run:
           name: Install Android sdk
           command: |
-            HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/cask
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install --cask
             HOMEBREW_NO_AUTO_UPDATE=1 brew cask install android-sdk
             HOMEBREW_NO_AUTO_UPDATE=1 brew cask install adoptopenjdk/openjdk/adoptopenjdk8
       - run: yes | sdkmanager --licenses && sdkmanager --update || true

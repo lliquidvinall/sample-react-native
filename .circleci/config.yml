@@ -1,13 +1,177 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine. See: https://circleci.com/docs/2.0/configuration-reference
-version: 2.1
-# Use a package of configuration called an orb.
-orbs:
-  # Declare a dependency on the welcome-orb
-  welcome: circleci/welcome-orb@0.4.1
-# Orchestrate or schedule a set of jobs
+version: 2
+
+aliases:
+  - &restore-yarn-cache
+    name: Restore cached root node_modules
+    key: yarn-cache-{{ checksum "yarn.lock" }}
+  - &restore-gradle-cache
+    name: Restore cached gradle dependencies
+    key: gradle_cache-{{ checksum "android/build.gradle" }}-{{ checksum  "android/app/build.gradle" }}
+  - &restore-pods-cache
+    name: Restore cached ios Pods
+    key: pods-cache-{{ checksum "ios/Podfile.lock" }}
+
+defaults: &defaults
+  macos:
+    xcode: 11.6.0
+
+## iOS Caching
+restore_pods_cache: &restore_pods_cache
+  restore_cache: *restore-pods-cache
+
+save_pods_cache: &save_pods_cache
+  save_cache:
+    key: pods-cache-{{ checksum "ios/Podfile.lock" }}
+    paths:
+      - ios/Pods
+
+## Android Caching
+restore_gradle_cache: &restore_gradle_cache
+  restore_cache: *restore-gradle-cache
+
+save_gradle_cache: &save_gradle_cache
+  save_cache:
+    key: gradle_cache-{{ checksum "android/build.gradle" }}-{{ checksum  "android/app/build.gradle" }}
+    paths:
+      - ~/.gradle
+
+download_android_dependencies: &download_android_dependencies
+  run:
+    name: Download Android Dependencies
+    command: |
+      ls
+      cd android
+      ./gradlew androidDependencies
+      cd ../
+
+# shared
+install_cli_interfaces: &install_cli_interfaces
+  run:
+    name: Install command line interfaces
+    command: yarn global add cavy-cli react-native-cli
+
+jobs:
+  node:
+    <<: *defaults
+    parallelism: 1
+    steps:
+      - checkout
+      - restore_cache: *restore-yarn-cache
+      - run:
+          name: Yarn install node modules
+          command: |
+            yarn install
+      - save_cache:
+          name: Save node_modules to cache
+          key: yarn-cache-{{ checksum "yarn.lock" }}
+          paths:
+            - node_modules
+
+  jest:
+    <<: *defaults
+    parallelism: 2
+    steps:
+      - checkout
+      - restore_cache: *restore-yarn-cache
+      - run:
+          name: Run Unit Tests
+          command: yarn run test:unit-tests
+
+  ios:
+    <<: *defaults
+    parallelism: 2
+    steps:
+      - checkout
+      - restore_cache: *restore-yarn-cache
+      - run:
+          name: Install React Native dependencies
+          command: |
+            brew update
+            brew install watchman cocoapods || exit 0
+      - *install_cli_interfaces
+      - *restore_pods_cache
+      - run:
+          name: pods install
+          command: |
+            cd ios
+            pod install
+      - *save_pods_cache
+      - run:
+          name: Build app and run tests
+          command: |
+            rm -rf $TMPDIR/react-*
+            rm -rf $TMPDIR/haste-*
+            rm -rf $TMPDIR/metro-*
+            watchman watch-del-all
+            react-native start --reset-cache &
+            yarn run test:ios-e2e-run
+
+  android:
+    <<: *defaults
+    parallelism: 2
+    shell: /bin/bash --login -eo pipefail
+    environment:
+      TERM: dumb
+      JVM_OPTS: -Xmx3200m
+    steps:
+      - checkout
+      - restore_cache: *restore-yarn-cache
+      - run:
+          name: Setup environment variables
+          command: |
+            echo 'export PATH="$PATH:/usr/local/opt/node@8/bin:${HOME}/.yarn/bin:${HOME}/${CIRCLE_PROJECT_REPONAME}/node_modules/.bin:/usr/local/share/android-sdk/tools/bin"' >> $BASH_ENV
+            echo 'export ANDROID_HOME="/usr/local/share/android-sdk"' >> $BASH_ENV
+            echo 'export ANDROID_SDK_HOME="/usr/local/share/android-sdk"' >> $BASH_ENV
+            echo 'export ANDROID_SDK_ROOT="/usr/local/share/android-sdk"' >> $BASH_ENV
+            echo 'export QEMU_AUDIO_DRV=none' >> $BASH_ENV
+            echo 'export JAVA_HOME="/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home"' >> $BASH_ENV
+      - run:
+          name: Install Android sdk
+          command: |
+            HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/cask
+            HOMEBREW_NO_AUTO_UPDATE=1 brew cask install android-sdk
+            HOMEBREW_NO_AUTO_UPDATE=1 brew cask install adoptopenjdk/openjdk/adoptopenjdk8
+      - run: yes | sdkmanager --licenses && sdkmanager --update || true
+      - run:
+          name: Install emulator dependencies
+          command: (yes | sdkmanager "platform-tools" "platforms;android-26" "extras;intel;Hardware_Accelerated_Execution_Manager" "build-tools;26.0.0" "system-images;android-26;google_apis;x86" "emulator" --verbose) || true
+      - *restore_gradle_cache
+      - *download_android_dependencies
+      - *save_gradle_cache
+      - run: avdmanager create avd -n Pixel_2_API_26 -k "system-images;android-26;google_apis;x86" -g google_apis -d "Nexus 5"
+      - *install_cli_interfaces
+      - run:
+          name: Build app and run tests
+          command: |
+            rm -rf $TMPDIR/react-*
+            rm -rf $TMPDIR/haste-*
+            rm -rf $TMPDIR/metro-*
+            react-native start --reset-cache &
+            yarn run test:android-e2e-run
+
 workflows:
-  # Name the workflow "welcome"
-  welcome:
-    # Run the welcome/run job in its own container
+  version: 2
+  test-suite:
     jobs:
-      - welcome/run
+      - node:
+          filters:
+            branches:
+              ignore: master
+      - ios:
+          filters:
+            branches:
+              ignore: master
+          requires:
+            - node
+      - jest:
+          filters:
+            branches:
+              ignore: master
+          requires:
+            - node
+      - android:
+          filters:
+            branches:
+              ignore: master
+          requires:
+            - node

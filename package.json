@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test:unit-tests": "jest --verbose ./__tests__",
     "test:ios-e2e-run": "cavy run-ios -t 15",
-    "test:android-e2e-run": "cavy run-android -t 15",
+    "test:android-e2e-run": "cavy run-android -t 15"
   },
   "dependencies": {
     "react": "17.0.1",
